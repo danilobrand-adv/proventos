@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Malha Fina | Auditoria de Folha - Goiana</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .row-expanded { background-color: #f8fafc; border-left: 4px solid #3b82f6; }
+        
+        /* Animação suave para o painel lateral */
+        .drawer-open { transform: translateX(0); }
+        .drawer-closed { transform: translateX(100%); }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen pb-12 overflow-x-hidden relative">
+
+    <div class="max-w-7xl mx-auto p-4 md:p-6">
+        
+        <header class="mb-6 bg-slate-900 text-white p-6 rounded-xl shadow-lg border-b-4 border-blue-500 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <div class="flex items-center gap-3 mb-1">
+                    <span class="bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">Malha Fina Contínua</span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight">Painel de Monitoramento de Proventos</h1>
+                <p class="text-slate-400 text-sm mt-1">Cruzamento automatizado de proventos (Tipo P) vs. Legislação Municipal</p>
+            </div>
+            <div class="text-right flex flex-col items-end">
+                <span id="status-sistema" class="text-sm font-medium flex items-center gap-2 text-yellow-400 animate-pulse">
+                    <span class="h-2 w-2 bg-yellow-400 rounded-full"></span> Iniciando processamento...
+                </span>
+            </div>
+        </header>
+
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row gap-4 items-end">
+            <div class="w-full md:w-1/3">
+                <label for="filtro-secretaria" class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Filtro por Lotação / Secretaria</label>
+                <div class="relative">
+                    <select id="filtro-secretaria" class="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 py-2 px-3 rounded-lg leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium disabled:opacity-50 transition" disabled>
+                        <option value="">Aguardando dados...</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="w-full md:w-2/3">
+                <label for="tabela-busca" class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Busca Textual (Evento ou Lei)</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                        <svg class="w-4 h-4 text-slate-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/></svg>
+                    </div>
+                    <input type="text" id="tabela-busca" placeholder="Ex: Gratificação, Adicional, nº da lei..." 
+                           class="w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 transition" disabled>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between hover:shadow-md transition">
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tipos de Proventos</span>
+                <span id="stat-eventos" class="text-3xl font-extrabold text-slate-800 mt-2">-</span>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border-b-4 border-b-blue-500 flex flex-col justify-between hover:shadow-md transition">
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-blue-600">Com Base Legal (OK)</span>
+                <span id="stat-leis" class="text-3xl font-extrabold text-blue-600 mt-2">-</span>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border-b-4 border-b-amber-500 flex flex-col justify-between hover:shadow-md transition">
+                <div class="flex justify-between items-start">
+                    <span class="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Sem Base Legal (Risco)</span>
+                    <span title="Requer diligência imediata" class="cursor-help text-amber-500 text-sm">⚠️</span>
+                </div>
+                <span id="stat-sem-lei" class="text-3xl font-extrabold text-amber-600 mt-2">-</span>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border-b-4 border-b-emerald-500 flex flex-col justify-between hover:shadow-md transition">
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-emerald-600">Impacto Financeiro (Filtro)</span>
+                <span id="stat-financeiro" class="text-xl md:text-2xl font-extrabold text-emerald-600 mt-2 truncate" title="Total filtrado">-</span>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-600 uppercase text-[10px] tracking-wider border-b border-slate-200 sticky top-0 z-10 select-none shadow-sm">
+                            <th class="py-3 px-4 font-bold w-12 text-center">Risco</th>
+                            <th id="th-codigo" class="py-3 px-4 font-bold w-28 cursor-pointer hover:bg-slate-200 hover:text-slate-900 transition group">
+                                Cód. <span class="sort-icon ml-1 text-slate-400 text-[8px] inline-block opacity-50 group-hover:opacity-100">▲▼</span>
+                            </th>
+                            <th id="th-descricao" class="py-3 px-4 font-bold cursor-pointer hover:bg-slate-200 hover:text-slate-900 transition group">
+                                Descrição na Folha <span class="sort-icon ml-1 text-slate-400 text-[8px] inline-block opacity-50 group-hover:opacity-100">▲▼</span>
+                            </th>
+                            <th class="py-3 px-4 font-bold">Fundamentação (Cruzamento)</th>
+                            <th id="th-servidores" class="py-3 px-4 font-bold text-center w-32 cursor-pointer hover:bg-slate-200 hover:text-slate-900 transition group">
+                                Servidores <span class="sort-icon ml-1 text-slate-400 text-[8px] inline-block opacity-50 group-hover:opacity-100">▲▼</span>
+                            </th>
+                            <th id="th-total" class="py-3 px-4 font-bold text-right w-36 cursor-pointer hover:bg-slate-200 hover:text-slate-900 transition group">
+                                Total (R$) <span class="sort-icon ml-1 text-slate-400 text-[8px] inline-block opacity-50 group-hover:opacity-100">▲▼</span>
+                            </th>
+                            <th class="py-3 px-4 font-bold text-center w-24">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultado-corpo" class="divide-y divide-slate-100 text-sm">
+                        <tr>
+                            <td colspan="7" class="py-16 text-center text-slate-500">
+                                <div class="flex flex-col items-center justify-center gap-3">
+                                    <svg class="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                    <span class="font-medium">Cruzando bases de dados...</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="panel-overlay" class="fixed inset-0 bg-slate-900/50 hidden z-40 transition-opacity backdrop-blur-sm" onclick="fecharContracheque()"></div>
+
+    <div id="painel-contracheque" class="fixed inset-y-0 right-0 w-full md:w-[500px] bg-white shadow-2xl drawer-closed transition-transform duration-300 z-50 flex flex-col border-l border-slate-200">
+        <div class="bg-slate-900 text-white p-4 flex justify-between items-center shadow-md z-10">
+            <div class="flex items-center gap-2">
+                <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                <h2 class="text-lg font-bold tracking-wide">Espelho do Contracheque</h2>
+            </div>
+            <button onclick="fecharContracheque()" class="text-slate-400 hover:text-white hover:bg-slate-800 p-1 rounded transition">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        
+        <div class="p-5 flex-1 overflow-y-auto custom-scrollbar bg-slate-50" id="conteudo-contracheque">
+            </div>
+    </div>
+
+    <script>
+        const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ7ollrDhKhlyCtPnTQsMlFK2AmzNXA32LM1P7pvCzuJvaW6c23glm5-wbJWjrdzAKWydX2W81NidKK/pub?gid=965623084&single=true&output=csv';
+        const ARQUIVO_FOLHA = 'folha.json';
+
+        // Estado Global da Aplicação
+        let dicionarizacaoLeis = {}; 
+        let dadosBrutos = []; 
+        let listaFiltrada = []; 
+        let dicionarioServidoresCompleto = {}; 
+        
+        // Elementos da Interface
+        const selectSecretaria = document.getElementById('filtro-secretaria');
+        const inputBusca = document.getElementById('tabela-busca');
+        const statusSistema = document.getElementById('status-sistema');
+        let ordenacaoAtual = { coluna: 'total', direcao: 'desc' };
+
+        // Inicialização e Escuta de Eventos
+        document.addEventListener('DOMContentLoaded', () => {
+            carregarBaseCSV();
+
+            // === AQUI ESTÁ A CORREÇÃO: OUVINTES RESTAURADOS ===
+            selectSecretaria.addEventListener('change', aplicarFiltros);
+            inputBusca.addEventListener('input', aplicarFiltros);
+            
+            document.getElementById('th-codigo').addEventListener('click', () => ordenarLista('codigo'));
+            document.getElementById('th-descricao').addEventListener('click', () => ordenarLista('descricao'));
+            document.getElementById('th-servidores').addEventListener('click', () => ordenarLista('servidores'));
+            document.getElementById('th-total').addEventListener('click', () => ordenarLista('total'));
+            // ===================================================
+        });
+
+        // Fechar painel lateral ao apertar ESC
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') fecharContracheque();
+        });
+
+        async function carregarBaseCSV() {
+            try {
+                const response = await fetch(CSV_URL);
+                if (!response.ok) throw new Error("Erro na rede ao buscar CSV");
+                parseCSV(await response.text());
+                await carregarFolha();
+            } catch (erro) {
+                mostrarErroFatal("Falha ao conectar com o Google Sheets de Leis. Verifique sua conexão ou a URL.");
+                console.error(erro);
+            }
+        }
+
+        function parseCSV(text) {
+            const lines = text.split(/\r?\n/);
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+                const colunas = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+                if (colunas.length >= 4) {
+                    const codigo = colunas[0].trim().replace(/^0+/, '') || colunas[0].trim();
+                    if (codigo) {
+                        dicionarizacaoLeis[codigo] = {
+                            descricao: colunas[1].replace(/^"|"$/g, '').trim(),
+                            origem: colunas[3].replace(/^"|"$/g, '').trim(),
+                            ano: colunas[4] ? colunas[4].trim() : '',
+                            numero: colunas[5] ? colunas[5].trim() : '',
+                            leiDescricao: colunas[6] ? colunas[6].replace(/^"|"$/g, '').trim() : '',
+                            link: colunas[7] ? colunas[7].replace(/^"|"$/g, '').trim() : ''
+                        };
+                    }
+                }
+            }
+        }
+
+        async function carregarFolha() {
+            try {
+                const response = await fetch(ARQUIVO_FOLHA);
+                if (!response.ok) throw new Error(`Arquivo "${ARQUIVO_FOLHA}" não encontrado no diretório.`);
+                
+                const servidoresJson = await response.json();
+                let mapaProventos = {};
+                let secretariasUnicas = new Set();
+
+                servidoresJson.forEach(srv => {
+                    if (srv.matricula) {
+                        dicionarioServidoresCompleto[srv.matricula] = srv; 
+                    }
+
+                    const secretariaAtual = srv.secretaria ? srv.secretaria.trim() : 'SEM LOTAÇÃO ESPECIFICADA';
+                    secretariasUnicas.add(secretariaAtual);
+
+                    if (srv.basesDeCalculo && Array.isArray(srv.basesDeCalculo.baseCalculoProventos)) {
+                        srv.basesDeCalculo.baseCalculoProventos.forEach(prov => {
+                            if (prov.tipo === "P") {
+                                const cod = prov.codigo.trim().replace(/^0+/, '') || prov.codigo.trim();
+                                const desc = prov.descricao ? prov.descricao.trim() : "Sem descrição";
+                                
+                                let valorLimpo = 0;
+                                if(prov.valor) {
+                                    valorLimpo = parseFloat(prov.valor.replace(/\./g, '').replace(',', '.'));
+                                    if(isNaN(valorLimpo)) valorLimpo = 0;
+                                }
+
+                                if (!mapaProventos[cod]) {
+                                    mapaProventos[cod] = {
+                                        codigo: prov.codigo.trim(), 
+                                        descricao: desc,
+                                        servidores: [],
+                                        valorTotalGeral: 0
+                                    };
+                                }
+
+                                mapaProventos[cod].valorTotalGeral += valorLimpo;
+                                mapaProventos[cod].servidores.push({
+                                    matricula: srv.matricula,
+                                    nome: srv.nome,
+                                    cargo: srv.cargo,
+                                    secretaria: secretariaAtual,
+                                    valorIndividual: valorLimpo
+                                });
+                            }
+                        });
+                    }
+                });
+
+                dadosBrutos = Object.values(mapaProventos);
+                popularDropdownSecretarias(Array.from(secretariasUnicas).sort());
+
+                selectSecretaria.disabled = false;
+                inputBusca.disabled = false;
+                statusSistema.innerHTML = `<span class="h-2 w-2 bg-emerald-400 rounded-full"></span> Bases Sincronizadas`;
+                statusSistema.className = "text-sm font-bold flex items-center gap-2 text-emerald-400";
+
+                aplicarFiltros();
+
+            } catch (erro) {
+                mostrarErroFatal(erro.message + "<br><span class='text-sm font-normal text-slate-500'>Certifique-se de estar rodando em um servidor local (Live Server).</span>");
+            }
+        }
+
+        function popularDropdownSecretarias(secretarias) {
+            selectSecretaria.innerHTML = '<option value="">Todas as Secretarias / Lotações (Visão Global)</option>';
+            secretarias.forEach(sec => {
+                const opt = document.createElement('option');
+                opt.value = sec;
+                opt.textContent = sec;
+                selectSecretaria.appendChild(opt);
+            });
+        }
+
+        function aplicarFiltros() {
+            const secSelecionada = selectSecretaria.value;
+            const termoBusca = inputBusca.value.toLowerCase().trim();
+            listaFiltrada = [];
+
+            dadosBrutos.forEach(eventoOrigem => {
+                const servidoresFiltrados = eventoOrigem.servidores.filter(srv => secSelecionada === "" || srv.secretaria === secSelecionada);
+
+                if (servidoresFiltrados.length > 0) {
+                    const novoTotal = servidoresFiltrados.reduce((acc, srv) => acc + srv.valorIndividual, 0);
+                    const eventoParaRenderizar = {
+                        codigo: eventoOrigem.codigo,
+                        descricao: eventoOrigem.descricao,
+                        servidores: servidoresFiltrados,
+                        valorTotal: novoTotal
+                    };
+
+                    let passaBuscaTextual = true;
+                    if (termoBusca !== "") {
+                        const codLimpo = eventoParaRenderizar.codigo.replace(/^0+/, '') || eventoParaRenderizar.codigo;
+                        const lei = dicionarizacaoLeis[codLimpo];
+                        let textoLei = lei ? `${lei.numero} ${lei.ano} ${lei.leiDescricao}`.toLowerCase() : "";
+                        const strBusca = `${eventoParaRenderizar.codigo} ${eventoParaRenderizar.descricao} ${textoLei}`.toLowerCase();
+                        passaBuscaTextual = strBusca.includes(termoBusca);
+                    }
+
+                    if (passaBuscaTextual) listaFiltrada.push(eventoParaRenderizar);
+                }
+            });
+
+            ordenarLista(ordenacaoAtual.coluna, false);
+        }
+
+        function ordenarLista(campo, alternarDirecao = true) {
+            if (listaFiltrada.length === 0) { renderizarInterface(); return; }
+
+            if (alternarDirecao) {
+                if (ordenacaoAtual.coluna === campo) {
+                    ordenacaoAtual.direcao = ordenacaoAtual.direcao === 'asc' ? 'desc' : 'asc';
+                } else {
+                    ordenacaoAtual.coluna = campo;
+                    ordenacaoAtual.direcao = 'desc';
+                }
+            } else {
+                ordenacaoAtual.coluna = campo;
+            }
+
+            listaFiltrada.sort((a, b) => {
+                let valA, valB;
+                if (campo === 'codigo') { valA = parseInt(a.codigo) || 0; valB = parseInt(b.codigo) || 0; } 
+                else if (campo === 'descricao') { valA = a.descricao.toLowerCase(); valB = b.descricao.toLowerCase(); } 
+                else if (campo === 'servidores') { valA = a.servidores.length; valB = b.servidores.length; } 
+                else if (campo === 'total') { valA = a.valorTotal; valB = b.valorTotal; }
+
+                if (valA < valB) return ordenacaoAtual.direcao === 'asc' ? -1 : 1;
+                if (valA > valB) return ordenacaoAtual.direcao === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            atualizarVisualCabecalhos();
+            renderizarInterface();
+        }
+
+        function atualizarVisualCabecalhos() {
+            const colunasMapeadas = { 'codigo': 'th-codigo', 'descricao': 'th-descricao', 'servidores': 'th-servidores', 'total': 'th-total' };
+            Object.values(colunasMapeadas).forEach(id => {
+                const th = document.getElementById(id);
+                if(th) {
+                    th.querySelector('.sort-icon').innerText = '▲▼';
+                    th.querySelector('.sort-icon').className = 'sort-icon ml-1 text-slate-300 text-[8px] inline-block opacity-50 group-hover:opacity-100';
+                }
+            });
+            const thAtivo = document.getElementById(colunasMapeadas[ordenacaoAtual.coluna]);
+            if (thAtivo) {
+                const seta = ordenacaoAtual.direcao === 'asc' ? '▲' : '▼';
+                thAtivo.querySelector('.sort-icon').innerText = seta;
+                thAtivo.querySelector('.sort-icon').className = 'sort-icon ml-1 text-blue-600 font-bold text-[10px] inline-block opacity-100';
+            }
+        }
+
+        function renderizarInterface() {
+            const corpoTabela = document.getElementById('resultado-corpo');
+            corpoTabela.innerHTML = '';
+            
+            let statEventos = 0, statConciliados = 0, statSemLei = 0, statValorFinanceiro = 0;
+
+            if (listaFiltrada.length === 0) {
+                corpoTabela.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-slate-500 font-medium">Nenhum provento encontrado para os filtros atuais.</td></tr>`;
+            }
+
+            listaFiltrada.forEach((evento) => {
+                statEventos++;
+                statValorFinanceiro += evento.valorTotal;
+
+                const codChave = evento.codigo.replace(/^0+/, '') || evento.codigo;
+                const lei = dicionarizacaoLeis[codChave];
+                
+                let baseLegalTexto = '', acaoBotao = '', statusIcon = '';
+
+                if (lei && lei.numero) {
+                    statConciliados++;
+                    statusIcon = `<span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-600" title="Regular">✓</span>`;
+                    baseLegalTexto = `
+                        <div>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 mb-1 border border-slate-200">
+                                Lei nº ${lei.numero}/${lei.ano} - ${lei.origem}
+                            </span>
+                            <p class="text-xs text-slate-500 truncate max-w-xs md:max-w-md" title="${lei.leiDescricao}">${lei.leiDescricao}</p>
+                        </div>`;
+                    if (lei.link && lei.link.startsWith('http')) {
+                        acaoBotao = `<a href="${lei.link}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800 hover:underline font-bold px-2 py-1 rounded hover:bg-blue-50 transition">Ver Lei ↗</a>`;
+                    } else {
+                        acaoBotao = `<span class="text-xs text-slate-400 italic">Sem Arquivo</span>`;
+                    }
+                } else {
+                    statSemLei++;
+                    statusIcon = `<span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 text-amber-600 font-bold" title="Risco de Improbidade">!</span>`;
+                    baseLegalTexto = `<span class="inline-flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-1 rounded text-xs font-semibold border border-amber-200">Legislação não mapeada</span>`;
+                    acaoBotao = `<span class="text-slate-300">—</span>`;
+                }
+
+                const trEvento = document.createElement('tr');
+                trEvento.className = "hover:bg-slate-50 cursor-pointer transition select-none border-b border-slate-100";
+                trEvento.innerHTML = `
+                    <td class="py-3 px-4 text-center">${statusIcon}</td>
+                    <td class="py-3 px-4 font-mono font-bold text-slate-700">${evento.codigo}</td>
+                    <td class="py-3 px-4 font-semibold text-slate-800">${evento.descricao}</td>
+                    <td class="py-3 px-4">${baseLegalTexto}</td>
+                    <td class="py-3 px-4 text-center font-bold text-slate-600 bg-slate-50/50">${evento.servidores.length}</td>
+                    <td class="py-3 px-4 text-right font-mono font-bold text-slate-900">R$ ${evento.valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                    <td class="py-3 px-4 text-center" onclick="event.stopPropagation()">${acaoBotao}</td>
+                `;
+
+                const trSub = document.createElement('tr');
+                trSub.className = "hidden";
+                
+                let linhasServidoresHTML = evento.servidores.map(srv => `
+                    <tr class="hover:bg-blue-50 cursor-pointer transition group" onclick="abrirContracheque('${srv.matricula}')">
+                        <td class="p-2 font-mono text-center text-slate-500 group-hover:text-blue-600">${srv.matricula}</td>
+                        <td class="p-2 font-semibold text-slate-700 group-hover:text-blue-700 flex items-center gap-2">
+                            ${srv.nome}
+                            <span class="opacity-0 group-hover:opacity-100 bg-blue-100 text-blue-700 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase transition">Ver Recibo</span>
+                        </td>
+                        <td class="p-2 text-slate-600 text-[11px]">${srv.cargo}</td>
+                        <td class="p-2 text-slate-500 text-[11px] truncate max-w-[150px]" title="${srv.secretaria}">${srv.secretaria}</td>
+                        <td class="p-2 text-right font-mono font-bold text-slate-800">R$ ${srv.valorIndividual.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                    </tr>
+                `).join('');
+
+                trSub.innerHTML = `
+                    <td colspan="7" class="p-0">
+                        <div class="p-4 bg-slate-100 border-x-4 border-x-blue-500 shadow-inner">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="text-xs font-bold text-slate-500 uppercase">Relação de Beneficiários: <span class="text-blue-600 font-mono">${evento.codigo}</span></h4>
+                                <span class="text-[10px] text-slate-400 italic">Clique em um servidor para ver o contracheque completo</span>
+                            </div>
+                            <div class="max-h-64 overflow-y-auto custom-scrollbar border border-slate-200 rounded-lg bg-white">
+                                <table class="w-full text-left text-xs">
+                                    <thead class="bg-slate-50 text-slate-500 uppercase font-bold text-[10px] sticky top-0 border-b border-slate-200 shadow-sm">
+                                        <tr>
+                                            <th class="p-2 w-24 text-center">Matrícula</th>
+                                            <th class="p-2">Nome Completo</th>
+                                            <th class="p-2">Cargo</th>
+                                            <th class="p-2">Lotação</th>
+                                            <th class="p-2 text-right w-32">Valor do Evento</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100">
+                                        ${linhasServidoresHTML}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </td>
+                `;
+
+                trEvento.addEventListener('click', () => {
+                    trSub.classList.toggle('hidden');
+                    trEvento.classList.toggle('row-expanded');
+                });
+
+                corpoTabela.appendChild(trEvento);
+                corpoTabela.appendChild(trSub);
+            });
+
+            document.getElementById('stat-eventos').innerText = statEventos;
+            document.getElementById('stat-leis').innerText = statConciliados;
+            document.getElementById('stat-sem-lei').innerText = statSemLei;
+            document.getElementById('stat-financeiro').innerText = statValorFinanceiro.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        }
+
+        // ==========================================
+        // FUNÇÕES DO PAINEL LATERAL (CONTRACHEQUE)
+        // ==========================================
+
+        function abrirContracheque(matricula) {
+            const srv = dicionarioServidoresCompleto[matricula];
+            if (!srv) {
+                alert("Dados detalhados não encontrados para esta matrícula.");
+                return;
+            }
+
+            const painel = document.getElementById('painel-contracheque');
+            const overlay = document.getElementById('panel-overlay');
+            const conteudo = document.getElementById('conteudo-contracheque');
+
+            let html = `
+                <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-4">
+                    <h3 class="font-extrabold text-slate-800 text-lg mb-3 border-b border-slate-100 pb-2">${srv.nome}</h3>
+                    <div class="grid grid-cols-2 gap-y-3 gap-x-4 text-xs">
+                        <div><span class="block text-[10px] font-bold text-slate-400 uppercase">Matrícula</span><span class="font-mono text-slate-700">${srv.matricula}</span></div>
+                        <div><span class="block text-[10px] font-bold text-slate-400 uppercase">CPF</span><span class="font-mono text-slate-700">${srv.cpf || 'Não informado'}</span></div>
+                        <div class="col-span-2"><span class="block text-[10px] font-bold text-slate-400 uppercase">Cargo / Função</span><span class="text-slate-700">${srv.cargo || '-'}</span></div>
+                        <div class="col-span-2"><span class="block text-[10px] font-bold text-slate-400 uppercase">Lotação</span><span class="text-slate-700">${srv.secretaria || '-'}</span></div>
+                        <div><span class="block text-[10px] font-bold text-slate-400 uppercase">Vínculo</span><span class="inline-block px-2 py-0.5 mt-0.5 rounded bg-slate-100 text-slate-700 font-semibold border border-slate-200">${srv.vinculo || '-'}</span></div>
+                    </div>
+                </div>
+            `;
+
+            html += `
+                <div class="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden mb-4">
+                    <table class="w-full text-xs text-left">
+                        <thead class="bg-slate-100 border-b border-slate-200 text-slate-600">
+                            <tr>
+                                <th class="p-2 font-bold w-12 text-center">Cód.</th>
+                                <th class="p-2 font-bold">Descrição da Rubrica</th>
+                                <th class="p-2 font-bold text-center w-12">Ref.</th>
+                                <th class="p-2 font-bold text-right w-24">Provento</th>
+                                <th class="p-2 font-bold text-right w-24">Desconto</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+            `;
+
+            let listouAlgo = false;
+
+            if (srv.basesDeCalculo && srv.basesDeCalculo.baseCalculoProventos) {
+                srv.basesDeCalculo.baseCalculoProventos.forEach(p => {
+                    listouAlgo = true;
+                    html += `
+                        <tr class="hover:bg-slate-50">
+                            <td class="p-2 font-mono text-slate-500 text-center">${p.codigo || '-'}</td>
+                            <td class="p-2 font-medium text-slate-700">${p.descricao || '-'}</td>
+                            <td class="p-2 text-center text-slate-400">${p.quantidade || ''}</td>
+                            <td class="p-2 text-right font-mono font-medium text-emerald-600">${p.valor || '0,00'}</td>
+                            <td class="p-2 text-right font-mono text-slate-300">-</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            let baseDescontos = srv.basesDeCalculo?.baseCalculoDescontos || srv.basesDeCalculo?.baseCalculoDeducoes;
+            if (baseDescontos && Array.isArray(baseDescontos)) {
+                baseDescontos.forEach(d => {
+                    listouAlgo = true;
+                    html += `
+                        <tr class="hover:bg-slate-50">
+                            <td class="p-2 font-mono text-slate-500 text-center">${d.codigo || '-'}</td>
+                            <td class="p-2 font-medium text-slate-700">${d.descricao || '-'}</td>
+                            <td class="p-2 text-center text-slate-400">${d.quantidade || ''}</td>
+                            <td class="p-2 text-right font-mono text-slate-300">-</td>
+                            <td class="p-2 text-right font-mono font-medium text-red-500">${d.valor || '0,00'}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            if (!listouAlgo) {
+                html += `<tr><td colspan="5" class="p-4 text-center text-slate-400 italic">Detalhes de rubricas não encontrados no arquivo.</td></tr>`;
+            }
+
+            html += `</tbody></table></div>`;
+
+            html += `
+                <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-1 flex justify-between">
+                    <div class="flex-1 p-3 text-center border-r border-slate-100">
+                        <span class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Proventos</span>
+                        <span class="font-mono font-bold text-emerald-600">R$ ${srv.proventos || '0,00'}</span>
+                    </div>
+                    <div class="flex-1 p-3 text-center border-r border-slate-100">
+                        <span class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Descontos</span>
+                        <span class="font-mono font-bold text-red-500">R$ ${srv.descontos || '0,00'}</span>
+                    </div>
+                    <div class="flex-1 p-3 text-center bg-blue-50/50 rounded-r-lg">
+                        <span class="block text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-1">Valor Líquido</span>
+                        <span class="font-mono font-extrabold text-blue-700 text-lg">R$ ${srv.liquido || '0,00'}</span>
+                    </div>
+                </div>
+            `;
+
+            conteudo.innerHTML = html;
+            overlay.classList.remove('hidden');
+            
+            setTimeout(() => {
+                painel.classList.remove('drawer-closed');
+                painel.classList.add('drawer-open');
+            }, 10);
+        }
+
+        function fecharContracheque() {
+            const painel = document.getElementById('painel-contracheque');
+            const overlay = document.getElementById('panel-overlay');
+            
+            painel.classList.remove('drawer-open');
+            painel.classList.add('drawer-closed');
+            
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+            }, 300);
+        }
+
+        function mostrarErroFatal(msg) {
+            document.getElementById('resultado-corpo').innerHTML = `
+                <tr><td colspan="7" class="py-12 text-center text-red-500 bg-red-50 border-t border-red-100">
+                    <span class="font-bold text-lg block mb-2">Erro de Processamento</span>
+                    ${msg}
+                </td></tr>`;
+            statusSistema.innerHTML = `<span class="h-2 w-2 bg-red-500 rounded-full"></span> Falha Crítica`;
+            statusSistema.className = "text-sm font-bold flex items-center gap-2 text-red-500";
+        }
+    </script>
+</body>
+</html>
