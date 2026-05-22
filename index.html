@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monitoramento | Conformidade de Folha - Goiana</title>
+    <title>Monitoramento Contínuo| Auditoria de Folha - Goiana</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -50,12 +50,12 @@
             </div>
 
             <div class="w-full md:w-2/3">
-                <label for="tabela-busca" class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Busca Textual (Evento ou Lei)</label>
+                <label for="tabela-busca" class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Busca Textual</label>
                 <div class="relative">
                     <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                         <svg class="w-4 h-4 text-slate-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/></svg>
                     </div>
-                    <input type="text" id="tabela-busca" placeholder="Ex: Gratificação, Adicional, nº da lei..." 
+                    <input type="text" id="tabela-busca" placeholder="Busque por Evento, Lei, Nome ou Matrícula do Servidor..." 
                            class="w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 transition" disabled>
                 </div>
             </div>
@@ -134,7 +134,7 @@
         </div>
         
         <div class="p-5 flex-1 overflow-y-auto custom-scrollbar bg-slate-50" id="conteudo-contracheque">
-            </div>
+        </div>
     </div>
 
     <script>
@@ -157,15 +157,21 @@
         document.addEventListener('DOMContentLoaded', () => {
             carregarBaseCSV();
 
-            // === AQUI ESTÁ A CORREÇÃO: OUVINTES RESTAURADOS ===
             selectSecretaria.addEventListener('change', aplicarFiltros);
-            inputBusca.addEventListener('input', aplicarFiltros);
+            
+            // Implementação do Debounce para melhorar a performance
+            let timeoutBusca;
+            inputBusca.addEventListener('input', () => {
+                clearTimeout(timeoutBusca);
+                timeoutBusca = setTimeout(() => {
+                    aplicarFiltros();
+                }, 300); // Aguarda 300ms após o utilizador parar de digitar
+            });
             
             document.getElementById('th-codigo').addEventListener('click', () => ordenarLista('codigo'));
             document.getElementById('th-descricao').addEventListener('click', () => ordenarLista('descricao'));
             document.getElementById('th-servidores').addEventListener('click', () => ordenarLista('servidores'));
             document.getElementById('th-total').addEventListener('click', () => ordenarLista('total'));
-            // ===================================================
         });
 
         // Fechar painel lateral ao apertar ESC
@@ -268,7 +274,7 @@
                 aplicarFiltros();
 
             } catch (erro) {
-                mostrarErroFatal(erro.message + "<br><span class='text-sm font-normal text-slate-500'>Certifique-se de estar rodando em um servidor local (Live Server).</span>");
+                mostrarErroFatal(erro.message + "<br><span class='text-sm font-normal text-slate-500'>Certifique-se de estar a correr num servidor local (Live Server).</span>");
             }
         }
 
@@ -282,33 +288,46 @@
             });
         }
 
+        // Lógica de Busca Híbrida Profunda
         function aplicarFiltros() {
             const secSelecionada = selectSecretaria.value;
             const termoBusca = inputBusca.value.toLowerCase().trim();
             listaFiltrada = [];
 
             dadosBrutos.forEach(eventoOrigem => {
-                const servidoresFiltrados = eventoOrigem.servidores.filter(srv => secSelecionada === "" || srv.secretaria === secSelecionada);
+                // 1. Verifica se a busca textual bate com o cabeçalho do EVENTO ou LEI
+                let passaBuscaEvento = false;
+                const codLimpo = eventoOrigem.codigo.replace(/^0+/, '') || eventoOrigem.codigo;
+                const lei = dicionarizacaoLeis[codLimpo];
+                let textoLei = lei ? `${lei.numero} ${lei.ano} ${lei.leiDescricao}`.toLowerCase() : "";
+                const strBuscaEvento = `${eventoOrigem.codigo} ${eventoOrigem.descricao} ${textoLei}`.toLowerCase();
+                
+                if (termoBusca === "" || strBuscaEvento.includes(termoBusca)) {
+                    passaBuscaEvento = true;
+                }
 
+                // 2. Filtra a lista de servidores (Secretaria + Busca Profunda no Nome/Matrícula)
+                const servidoresFiltrados = eventoOrigem.servidores.filter(srv => {
+                    if (secSelecionada !== "" && srv.secretaria !== secSelecionada) return false;
+                    
+                    // Se a busca bateu com o evento geral, mantém todos os servidores (da lotação)
+                    if (termoBusca === "" || passaBuscaEvento) return true;
+
+                    // Busca Profunda: Verifica se o termo digitado é o Nome ou Matrícula
+                    const strServidor = `${srv.matricula} ${srv.nome}`.toLowerCase();
+                    return strServidor.includes(termoBusca);
+                });
+
+                // 3. Adiciona o evento à lista se restaram servidores válidos
                 if (servidoresFiltrados.length > 0) {
                     const novoTotal = servidoresFiltrados.reduce((acc, srv) => acc + srv.valorIndividual, 0);
-                    const eventoParaRenderizar = {
+                    
+                    listaFiltrada.push({
                         codigo: eventoOrigem.codigo,
                         descricao: eventoOrigem.descricao,
                         servidores: servidoresFiltrados,
                         valorTotal: novoTotal
-                    };
-
-                    let passaBuscaTextual = true;
-                    if (termoBusca !== "") {
-                        const codLimpo = eventoParaRenderizar.codigo.replace(/^0+/, '') || eventoParaRenderizar.codigo;
-                        const lei = dicionarizacaoLeis[codLimpo];
-                        let textoLei = lei ? `${lei.numero} ${lei.ano} ${lei.leiDescricao}`.toLowerCase() : "";
-                        const strBusca = `${eventoParaRenderizar.codigo} ${eventoParaRenderizar.descricao} ${textoLei}`.toLowerCase();
-                        passaBuscaTextual = strBusca.includes(termoBusca);
-                    }
-
-                    if (passaBuscaTextual) listaFiltrada.push(eventoParaRenderizar);
+                    });
                 }
             });
 
@@ -472,10 +491,6 @@
             document.getElementById('stat-sem-lei').innerText = statSemLei;
             document.getElementById('stat-financeiro').innerText = statValorFinanceiro.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         }
-
-        // ==========================================
-        // FUNÇÕES DO PAINEL LATERAL (CONTRACHEQUE)
-        // ==========================================
 
         function abrirContracheque(matricula) {
             const srv = dicionarioServidoresCompleto[matricula];
